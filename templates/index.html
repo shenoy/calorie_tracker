@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Compound Effect : Calorie Tracker</title>
+    <link rel="icon" type="image/png" href="{{ url_for('static', filename='favicon.png') }}">
+    <style>
+    /* Default for Desktop */
+    body {
+        font-family: Arial, sans-serif;
+        margin: 0 auto;
+        padding: 20px;
+        max-width: 900px; /* Limits the app width on big screens */
+        background-color: #f4f4f9;
+    }
+
+    .container {
+        background: white;
+        padding: 20px;
+        border-radius: 12px;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    }
+
+    /* Nav Buttons Styling */
+        .nav-btn {
+            padding: 12px 18px;
+            text-decoration: none;
+            border-radius: 10px;
+            font-weight: bold;
+            font-size: 14px;
+            transition: transform 0.2s;
+        }
+        .nav-btn:hover { transform: translateY(-2px); }
+
+        /* Big Wide Input Styling */
+        input[type="text"],
+        input[type="number"],
+        select {
+            width: 100%;
+            padding: 15px;
+            margin: 10px 0 20px 0;
+            display: inline-block;
+            border: 1px solid #ddd;
+            border-radius: 10px;
+            box-sizing: border-box;
+            font-size: 16px;
+            background-color: #f9f9f9;
+        }
+
+        input:focus {
+            border-color: #1a73e8;
+            outline: none;
+            background-color: #fff;
+        }
+
+        button[type="submit"], .action-btn {
+            width: 100%;
+            padding: 16px;
+            background-color: #1a73e8;
+            color: white;
+            font-weight: bold;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+
+        /* Quick Add Buttons */
+        .quick-btn {
+            padding: 10px 15px;
+            background-color: #e8f0fe;
+            border: 1px solid #1a73e8;
+            border-radius: 20px;
+            color: #1a73e8;
+            font-weight: 500;
+            cursor: pointer;
+        }
+
+                /* Table Styling for Today's Log */
+        .log-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+            font-size: 15px;
+            border-radius: 10px;
+            overflow: hidden;
+        }
+
+        .log-table thead tr {
+            background-color: #1a73e8; /* Blue to match your Calorie Tracker theme */
+            color: #ffffff;
+            text-align: left;
+            font-weight: bold;
+        }
+
+        .log-table th, .log-table td {
+            padding: 12px 15px;
+            border-bottom: 1px solid #eee;
+        }
+
+        .log-table tbody tr:nth-of-type(even) {
+            background-color: #f8f9fa;
+        }
+
+        .log-table tbody tr:hover {
+            background-color: #f1f4f8;
+        }
+
+        .delete-btn {
+            color: #ea4335;
+            text-decoration: none;
+            font-weight: bold;
+            font-size: 18px;
+        }
+
+        .stats-grid {
+        display: flex;
+        gap: 15px;
+        margin-bottom: 30px;
+        flex-wrap: wrap; /* Allows cards to stack on small phones */
+        }
+
+        .stat-card {
+            flex: 1; /* Makes all cards the same width */
+            min-width: 150px;
+            padding: 20px;
+            border-radius: 15px;
+            text-align: center;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+            background: #fff;
+            border: 1px solid #eee;
+        }
+
+        .stat-value {
+            display: block;
+            font-size: 24px;
+            font-weight: 800;
+            margin-top: 5px;
+        }
+
+        .stat-label {
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: #666;
+            font-weight: 600;
+        }
+
+        details summary::-webkit-details-marker {
+            display: none; /* Hides the default tiny arrow */
+        }
+
+        details[open] summary {
+            border-bottom: 1px solid #eee;
+            margin-bottom: 10px;
+        }
+
+        details {
+            transition: all 0.3s ease;
+        }
+
+
+    /* Adjustments for Mobile (Screens smaller than 600px) */
+    @media (max-width: 600px) {
+        body {
+            padding: 10px;
+            max-width: 100%; /* Uses full width on phones */
+        }
+
+        .container {
+            padding: 15px;
+            border-radius: 0; /* Optional: square edges look better on mobile */
+        }
+
+        button {
+            width: 100%; /* Makes buttons easier to tap on mobile */
+            margin-bottom: 10px;
+        }
+    }
+</style>
+</head>
+<body>
+        <div id="flash-container" style="position: fixed; top: 20px; right: 20px; z-index: 1000; min-width: 250px;">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+          {% if messages %}
+            {% for category, message in messages %}
+              <div class="flash-message" style="padding: 15px; margin-bottom: 10px; border-radius: 8px;
+                          box-shadow: 0 4px 12px rgba(0,0,0,0.15); border-left: 5px solid {{ '#34a853' if category == 'success' else '#1a73e8' }};
+                          background-color: white; color: #333; font-weight: 500;
+                          transition: opacity 0.5s ease-out;">
+                {{ '✅' if category == 'success' else 'ℹ️' }} {{ message }}
+              </div>
+            {% endfor %}
+          {% endif %}
+        {% endwith %}
+        </div>
+<div class="container">
+        <nav style="margin-bottom: 30px; display: flex; gap: 10px; flex-wrap: wrap;">
+            <a href="/history" class="nav-btn" style="background: #1a73e8; color: white;">📊 History</a>
+            <a href="/manage_library" class="nav-btn" style="background: #eee; color: #333;">📚 Library</a>
+            <a href="/manage_quick_add" class="nav-btn" style="background: #eee; color: #333;">⚙️ Settings</a>
+        </nav>
+
+        <h2 style="margin-bottom: 15px;">Daily Status</h2>
+
+        <div class="stats-grid">
+            <div class="stat-card" style="border-top: 5px solid #1a73e8;">
+                <span class="stat-label">Daily Goal</span>
+                <span class="stat-value" style="color: #1a73e8;">{{ goal }}</span>
+            </div>
+
+            <div class="stat-card" style="border-top: 5px solid #fb8c00;">
+                <span class="stat-label">Total Consumed</span>
+                <span class="stat-value" style="color: #fb8c00;">{{ total }}</span>
+            </div>
+
+            {% set status_color = '#34a853' if remaining >= 0 else '#ea4335' %}
+            <div class="stat-card" style="border-top: 5px solid {{ status_color }}; background-color: {{ '#f0fff4' if remaining >= 0 else '#fff5f5' }};">
+                <span class="stat-label">Remaining</span>
+                <span class="stat-value" style="color: {{ status_color }};">{{ remaining }}</span>
+            </div>
+            <div class="stat-card" style="border-top: 5px solid #9c27b0;">
+                <span class="stat-label">Total Protein</span>
+                <span class="stat-value" style="color: #9c27b0;">{{ total_protein }}g</span>
+            </div>
+        </div>
+
+        <hr style="border: 0; border-top: 1px solid #eee; margin: 25px 0;">
+
+
+       <details style="margin-top: 30px; border: 1px solid #ddd; border-radius: 12px; background: #fff; overflow: hidden;">
+            <summary style="padding: 15px; font-size: 1.2em; font-weight: bold; cursor: pointer; list-style: none; display: flex; justify-content: space-between; align-items: center; background: #f8f9fa;">
+                <span>🕒 Today's Log</span>
+                <span style="font-size: 0.8em; color: #1a73e8;">(Tap to view/hide)</span>
+            </summary>
+
+            <div style="padding: 10px; overflow-x: auto;">
+                <table class="log-table" style="margin: 0;">
+                    <thead>
+                        <tr>
+                            <th>Time</th>
+                            <th>Item</th>
+                            <th>Calories</th>
+                            <th>Protein</th>
+                            <th style="text-align: center;">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for entry in entries %}
+                        <tr>
+                            <td style="color: #666; width: 80px;">{{ entry.date_created.strftime('%H:%M') }}</td>
+                            <td><strong>{{ entry.food_item }}</strong></td>
+                            <td>{{ entry.calories }} <span style="font-size: 0.8em; color: #888;">kcal</span></td>
+                            <td style="color: #9c27b0; font-weight: bold;">{{ entry.protein }}g</td>
+                            <td style="text-align: center;">
+                                <a href="/delete/{{ entry.id }}" class="delete-btn" title="Delete entry">×</a>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                        {% if not entries %}
+                        <tr>
+                            <td colspan="5" style="text-align: center; color: #999; padding: 20px;">No entries for today yet.</td>
+                        </tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+            </div>
+        </details>
+
+        <h3>Quick Add</h3>
+        <div style="display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 30px;">
+            {% for item in quick_foods %}
+                <button type="button" class="quick-btn" onclick="quickAdd('{{ item.name }}', {{ item.calories }}, {{ item.protein }})">
+                    + {{ item.name }}
+                </button>
+            {% endfor %}
+        </div>
+
+       <div style="padding: 20px; background: #f0f7ff; border-radius: 12px; border: 1px solid #d0e3ff;">
+            <h3 style="margin-top: 0;">Precision Add</h3>
+            <label>Select Item:</label>
+            <select id="calc-food" onchange="calculateNutrients()">
+                <option value="">-- Choose from Library --</option>
+                {% for food, values in food_db.items() %}
+                    <option value='{{ values | tojson }}'>{{ food }}</option>
+                {% endfor %}
+            </select>
+
+            <label>Weight (grams):</label>
+            <input type="number" id="calc-weight" placeholder="e.g. 150" oninput="calculateNutrients()">
+
+            <div style="font-size: 1.1em; margin-bottom: 15px; display: flex; gap: 20px;">
+                <div>Result: <strong id="calc-result" style="color: #1a73e8;">0</strong> kcal</div>
+                <div>Protein: <strong id="calc-protein-result" style="color: #9c27b0;">0</strong> g</div>
+            </div>
+
+            <form id="precision-form" method="POST">
+                <input type="hidden" name="food" id="final-food-name">
+                <input type="hidden" name="calories" id="final-calories">
+                <input type="hidden" name="protein" id="final-protein">
+                <button type="submit" onclick="submitPrecision(event)" class="action-btn">Add to Log</button>
+            </form>
+        </div>
+
+        <div style="margin-top: 30px; padding: 20px; background: #f9f9f9; border-radius: 12px;">
+            <h3 style="margin-top: 0;">Update Weight</h3>
+            <form action="/update_weight" method="POST">
+                <input type="number" step="0.1" name="weight" placeholder="Current weight in kg (e.g. 75.5)" required>
+                <button type="submit" style="background: #5f6368;" class="action-btn">Save Weight</button>
+            </form>
+            <p style="margin-top: 10px;">Current: <strong>{{ current_weight }} kg</strong></p>
+        </div>
+    </div>
+
+    <form id="calorie-form" method="POST" style="display: none;">
+        <input type="hidden" name="food" id="food-input">
+        <input type="hidden" name="calories" id="calories-input">
+    </form>
+
+     <script>
+        // Logic for Precision Add calculation
+        function calculateNutrients() {
+            const foodDataRaw = document.getElementById('calc-food').value;
+            const weight = document.getElementById('calc-weight').value;
+            const calDisplay = document.getElementById('calc-result');
+            const protDisplay = document.getElementById('calc-protein-result');
+
+            if (foodDataRaw && weight > 0) {
+                const data = JSON.parse(foodDataRaw);
+                const totalCals = (weight / 100) * data[0];
+                const totalProt = (weight / 100) * data[1];
+
+                calDisplay.innerText = totalCals.toFixed(1);
+                protDisplay.innerText = totalProt.toFixed(1);
+            } else {
+                calDisplay.innerText = "0";
+                protDisplay.innerText = "0";
+            }
+        }
+
+        function submitPrecision(event) {
+            event.preventDefault();
+            const foodSelect = document.getElementById('calc-food');
+            const foodName = foodSelect.options[foodSelect.selectedIndex].text;
+            const weight = document.getElementById('calc-weight').value;
+            const calories = document.getElementById('calc-result').innerText;
+            const protein = document.getElementById('calc-protein-result').innerText;
+
+            if (weight > 0 && foodSelect.value !== "") {
+                document.getElementById('final-food-name').value = foodName + " (" + weight + "g)";
+                document.getElementById('final-calories').value = Math.round(calories);
+                document.getElementById('final-protein').value = protein;
+                document.getElementById('precision-form').submit();
+            } else {
+                alert("Please select a food and enter a weight.");
+            }
+        }
+
+        // Logic for Quick Add buttons
+        function quickAdd(name, cals, protein = 0) {
+            document.getElementById('food-input').value = name;
+            document.getElementById('calories-input').value = cals;
+
+            let protInput = document.getElementById('protein-input');
+            if(!protInput) {
+                protInput = document.createElement('input');
+                protInput.type = 'hidden';
+                protInput.name = 'protein';
+                protInput.id = 'protein-input';
+                document.getElementById('calorie-form').appendChild(protInput);
+            }
+            protInput.value = protein;
+            document.getElementById('calorie-form').submit();
+        }
+    </script>
+
+
+        <form action="/update_weight" method="POST" style="margin-top: 20px; padding: 15px; background: #f9f9f9; border-radius: 10px;">
+            <label for="weight"><strong>Update Today's Weight (kg):</strong></label><br>
+            <input type="number" step="0.1" name="weight" id="weight" placeholder="e.g. 75.5" required>
+            <button type="submit">Save Weight</button>
+        </form>
+        <div style="margin-top: 20px; padding: 10px; border: 1px solid #ddd; border-radius: 8px;">
+        <strong>Today's Weight:</strong> {{ current_weight }} kg
+        </div>
+        <div style="margin-top: 30px; padding: 15px; background: #eef2f7; border-radius: 10px;">
+</div>
+</div>
+
+<script>
+    // Wait for the page to load
+    document.addEventListener('DOMContentLoaded', function() {
+        const messages = document.querySelectorAll('.flash-message');
+
+        messages.forEach(function(msg) {
+            // Set a timer to start fading after 4.5 seconds
+            setTimeout(function() {
+                msg.style.opacity = '0';
+                // Remove from DOM entirely after the fade finishes (at 5 seconds)
+                setTimeout(function() {
+                    msg.remove();
+                }, 500);
+            }, 4500);
+        });
+    });
+</script>
+</body>
+</html>
