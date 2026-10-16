@@ -159,6 +159,51 @@
         }
 
 
+    /* Toasts (top-right) */
+    #flash-container {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+        max-width: calc(100vw - 40px);
+        pointer-events: none; /* let clicks through the empty area */
+    }
+    .toast {
+        pointer-events: auto;
+        box-sizing: border-box;
+        width: 320px;
+        max-width: 100%;
+        padding: 14px 16px;
+        margin-bottom: 10px;
+        border-radius: 10px;
+        background: #fff;
+        color: #333;
+        font-weight: 500;
+        font-size: 14px;
+        box-shadow: 0 6px 18px rgba(0,0,0,0.18);
+        border-left: 5px solid #34a853;
+        animation: toast-in 0.25s ease-out;
+        transition: opacity 0.4s ease, transform 0.4s ease;
+    }
+    .toast.error { border-left-color: #ea4335; }
+    .toast.info  { border-left-color: #1a73e8; }
+    .toast.hide  { opacity: 0; transform: translateX(30px); }
+    .toast-row   { display: flex; align-items: flex-start; gap: 10px; }
+    .toast-msg   { flex: 1; line-height: 1.35; word-break: break-word; }
+    .toast-close {
+        width: auto !important; margin: 0 !important; padding: 0 4px !important;
+        background: none; border: none; color: #999; font-size: 20px; line-height: 1; cursor: pointer;
+    }
+    .toast-action {
+        width: auto !important; margin: 10px 0 0 0 !important; padding: 8px 12px !important;
+        background: #e8f0fe; color: #1a73e8; border: 1px solid #1a73e8; border-radius: 16px;
+        font-size: 13px; font-weight: 600; cursor: pointer;
+    }
+    .toast-action:disabled { opacity: 0.6; cursor: default; }
+    @keyframes toast-in {
+        from { opacity: 0; transform: translateX(40px); }
+        to   { opacity: 1; transform: translateX(0); }
+    }
+
     /* Adjustments for Mobile (Screens smaller than 600px) */
     @media (max-width: 600px) {
         body {
@@ -210,17 +255,17 @@
 
             <div class="stat-card" style="border-top: 5px solid #fb8c00;">
                 <span class="stat-label">Total Consumed</span>
-                <span class="stat-value" style="color: #fb8c00;">{{ total }}</span>
+                <span class="stat-value" id="stat-total" style="color: #fb8c00;">{{ total }}</span>
             </div>
 
             {% set status_color = '#34a853' if remaining >= 0 else '#ea4335' %}
-            <div class="stat-card" style="border-top: 5px solid {{ status_color }}; background-color: {{ '#f0fff4' if remaining >= 0 else '#fff5f5' }};">
+            <div class="stat-card" id="stat-remaining-card" style="border-top: 5px solid {{ status_color }}; background-color: {{ '#f0fff4' if remaining >= 0 else '#fff5f5' }};">
                 <span class="stat-label">Remaining</span>
-                <span class="stat-value" style="color: {{ status_color }};">{{ remaining }}</span>
+                <span class="stat-value" id="stat-remaining" style="color: {{ status_color }};">{{ remaining }}</span>
             </div>
             <div class="stat-card" style="border-top: 5px solid #9c27b0;">
                 <span class="stat-label">Total Protein</span>
-                <span class="stat-value" style="color: #9c27b0;">{{ total_protein }}g</span>
+                <span class="stat-value" id="stat-protein" style="color: #9c27b0;">{{ total_protein }}g</span>
             </div>
         </div>
 
@@ -244,7 +289,7 @@
                             <th style="text-align: center;">Action</th>
                         </tr>
                     </thead>
-                    <tbody>
+                    <tbody id="log-body">
                         {% for entry in entries %}
                         <tr>
                             <td style="color: #666; width: 80px;">{{ entry.date_created.strftime('%H:%M') }}</td>
@@ -257,7 +302,7 @@
                         </tr>
                         {% endfor %}
                         {% if not entries %}
-                        <tr>
+                        <tr id="no-entries-row">
                             <td colspan="5" style="text-align: center; color: #999; padding: 20px;">No entries for today yet.</td>
                         </tr>
                         {% endif %}
@@ -267,9 +312,9 @@
         </details>
 
         <h3>Quick Add</h3>
-        <div style="display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 30px;">
+        <div id="quick-add-list" style="display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 30px;">
             {% for item in quick_foods %}
-                <button type="button" class="quick-btn" onclick="quickAdd('{{ item.name }}', {{ item.calories }}, {{ item.protein }})">
+                <button type="button" class="quick-btn" data-name="{{ item.name }}" data-calories="{{ item.calories }}" data-protein="{{ item.protein }}">
                     + {{ item.name }}
                 </button>
             {% endfor %}
@@ -311,11 +356,6 @@
         </div>
     </div>
 
-    <form id="calorie-form" method="POST" style="display: none;">
-        <input type="hidden" name="food" id="food-input">
-        <input type="hidden" name="calories" id="calories-input">
-    </form>
-
      <script>
         // Logic for Precision Add calculation
         function calculateNutrients() {
@@ -337,40 +377,262 @@
             }
         }
 
-        function submitPrecision(event) {
+        // ---------- Sound ----------
+        let audioCtx = null;
+        function getAudioCtx() {
+            // Must be created/resumed inside a tap/click so the browser allows playback
+            try {
+                if (!audioCtx) {
+                    const AC = window.AudioContext || window.webkitAudioContext;
+                    if (!AC) return null;
+                    audioCtx = new AC();
+                }
+                if (audioCtx.state === 'suspended') audioCtx.resume();
+                return audioCtx;
+            } catch (e) { return null; }
+        }
+
+        function playTones(notes) {
+            const ctx = getAudioCtx();
+            if (!ctx) return;
+            const now = ctx.currentTime;
+            notes.forEach(([freq, offset]) => {
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.type = 'sine';
+                osc.frequency.value = freq;
+                gain.gain.setValueAtTime(0.0001, now + offset);
+                gain.gain.exponentialRampToValueAtTime(0.25, now + offset + 0.01);
+                gain.gain.exponentialRampToValueAtTime(0.0001, now + offset + 0.35);
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+                osc.start(now + offset);
+                osc.stop(now + offset + 0.4);
+            });
+        }
+        const playSuccess = () => playTones([[659.25, 0], [987.77, 0.09]]);  // E5 -> B5 chime
+        const playError   = () => playTones([[330, 0], [247, 0.12]]);        // low double tone
+
+        // ---------- Toasts ----------
+        function showToast(message, opts = {}) {
+            const { type = 'success', duration = 3500, actionLabel = null, onAction = null } = opts;
+            const container = document.getElementById('flash-container');
+            const toast = document.createElement('div');
+            toast.className = 'toast ' + type;
+
+            const row = document.createElement('div');
+            row.className = 'toast-row';
+            const msg = document.createElement('div');
+            msg.className = 'toast-msg';
+            msg.textContent = (type === 'error' ? '⚠️ ' : '✅ ') + message;
+            const close = document.createElement('button');
+            close.type = 'button';
+            close.className = 'toast-close';
+            close.setAttribute('aria-label', 'Dismiss');
+            close.textContent = '×';
+            row.appendChild(msg);
+            row.appendChild(close);
+            toast.appendChild(row);
+
+            let timer;
+            function dismiss() {
+                clearTimeout(timer);
+                toast.classList.add('hide');
+                setTimeout(() => toast.remove(), 400);
+            }
+            close.addEventListener('click', dismiss);
+
+            if (actionLabel && onAction) {
+                const action = document.createElement('button');
+                action.type = 'button';
+                action.className = 'toast-action';
+                action.textContent = actionLabel;
+                action.addEventListener('click', async () => {
+                    getAudioCtx();               // keep audio unlocked for the confirmation chime
+                    action.disabled = true;
+                    clearTimeout(timer);
+                    await onAction();
+                    dismiss();
+                });
+                toast.appendChild(action);
+            }
+
+            container.appendChild(toast);
+            timer = setTimeout(dismiss, duration);
+            return toast;
+        }
+
+        // ---------- Page updates (no reload) ----------
+        function updateDashboard(data) {
+            document.getElementById('stat-total').textContent = data.total;
+            document.getElementById('stat-remaining').textContent = data.remaining;
+            document.getElementById('stat-protein').textContent = data.total_protein + 'g';
+
+            const over = data.remaining < 0;
+            const color = over ? '#ea4335' : '#34a853';
+            const card = document.getElementById('stat-remaining-card');
+            card.style.borderTop = '5px solid ' + color;
+            card.style.backgroundColor = over ? '#fff5f5' : '#f0fff4';
+            document.getElementById('stat-remaining').style.color = color;
+
+            // Add the new row to Today's Log
+            const empty = document.getElementById('no-entries-row');
+            if (empty) empty.remove();
+            const e = data.entry;
+            const tr = document.createElement('tr');
+
+            const tdTime = document.createElement('td');
+            tdTime.style.cssText = 'color: #666; width: 80px;';
+            tdTime.textContent = e.time;
+
+            const tdItem = document.createElement('td');
+            const strong = document.createElement('strong');
+            strong.textContent = e.food;
+            tdItem.appendChild(strong);
+
+            const tdCal = document.createElement('td');
+            tdCal.textContent = e.calories + ' ';
+            const unit = document.createElement('span');
+            unit.style.cssText = 'font-size: 0.8em; color: #888;';
+            unit.textContent = 'kcal';
+            tdCal.appendChild(unit);
+
+            const tdProt = document.createElement('td');
+            tdProt.style.cssText = 'color: #9c27b0; font-weight: bold;';
+            tdProt.textContent = e.protein + 'g';
+
+            const tdAct = document.createElement('td');
+            tdAct.style.textAlign = 'center';
+            const del = document.createElement('a');
+            del.href = '/delete/' + e.id;
+            del.className = 'delete-btn';
+            del.title = 'Delete entry';
+            del.textContent = '×';
+            tdAct.appendChild(del);
+
+            [tdTime, tdItem, tdCal, tdProt, tdAct].forEach(td => tr.appendChild(td));
+            document.getElementById('log-body').appendChild(tr);
+        }
+
+        function quickAddExists(name) {
+            return Array.from(document.querySelectorAll('#quick-add-list .quick-btn'))
+                        .some(b => b.dataset.name === name);
+        }
+
+        // Move the button for a just-used item to the front of the list
+        function moveQuickAddToFront(name) {
+            const list = document.getElementById('quick-add-list');
+            const btn = Array.from(list.querySelectorAll('.quick-btn')).find(b => b.dataset.name === name);
+            if (btn && list.firstElementChild !== btn) list.prepend(btn);
+        }
+
+        function addQuickAddButton(item) {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'quick-btn';
+            btn.dataset.name = item.name;
+            btn.dataset.calories = item.calories;
+            btn.dataset.protein = item.protein;
+            btn.textContent = '+ ' + item.name;
+            document.getElementById('quick-add-list').prepend(btn);  // newest first
+        }
+
+        // ---------- Actions ----------
+        let logging = false;
+        async function logEntry(name, calories, protein, offerQuickAdd = false) {
+            if (logging) return false;           // ignore double taps while a request is in flight
+            logging = true;
+            getAudioCtx();                       // unlock audio while we still have the user's tap
+            try {
+                const fd = new FormData();
+                fd.append('food', name);
+                fd.append('calories', calories);
+                fd.append('protein', protein);
+                const res = await fetch('/', {
+                    method: 'POST',
+                    body: fd,
+                    headers: { 'X-Requested-With': 'fetch' },
+                    credentials: 'same-origin'
+                });
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok || !data.ok) throw new Error(data.error || 'Could not add that entry.');
+
+                updateDashboard(data);
+                moveQuickAddToFront(data.entry.food);
+                playSuccess();
+
+                const msg = 'Added ' + data.entry.food + ' · ' + data.entry.calories + ' kcal';
+                if (offerQuickAdd && !quickAddExists(data.entry.food)) {
+                    showToast(msg, {
+                        duration: 9000,
+                        actionLabel: '⭐ Save to Quick Add',
+                        onAction: () => saveToQuickAdd(data.entry.food, data.entry.calories, data.entry.protein)
+                    });
+                } else {
+                    showToast(msg);
+                }
+                return true;
+            } catch (err) {
+                playError();
+                showToast(err.message || 'Something went wrong.', { type: 'error', duration: 5000 });
+                return false;
+            } finally {
+                logging = false;
+            }
+        }
+
+        async function saveToQuickAdd(name, calories, protein) {
+            try {
+                const fd = new FormData();
+                fd.append('name', name);
+                fd.append('calories', calories);
+                fd.append('protein', protein);
+                const res = await fetch('/api/quick_add', {
+                    method: 'POST',
+                    body: fd,
+                    headers: { 'X-Requested-With': 'fetch' },
+                    credentials: 'same-origin'
+                });
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok || !data.ok) throw new Error(data.error || 'Could not save to Quick Add.');
+
+                if (!quickAddExists(data.item.name)) addQuickAddButton(data.item);
+                playSuccess();
+                showToast('Saved "' + data.item.name + '" to Quick Add');
+            } catch (err) {
+                playError();
+                showToast(err.message || 'Something went wrong.', { type: 'error', duration: 5000 });
+            }
+        }
+
+        async function submitPrecision(event) {
             event.preventDefault();
             const foodSelect = document.getElementById('calc-food');
-            const foodName = foodSelect.options[foodSelect.selectedIndex].text;
-            const weight = document.getElementById('calc-weight').value;
-            const calories = document.getElementById('calc-result').innerText;
+            const weightInput = document.getElementById('calc-weight');
+            const weight = weightInput.value;
+
+            if (!(weight > 0) || foodSelect.value === "") {
+                alert("Please select a food and enter a weight.");
+                return;
+            }
+
+            const foodName = foodSelect.options[foodSelect.selectedIndex].text + " (" + weight + "g)";
+            const calories = Math.round(document.getElementById('calc-result').innerText);
             const protein = document.getElementById('calc-protein-result').innerText;
 
-            if (weight > 0 && foodSelect.value !== "") {
-                document.getElementById('final-food-name').value = foodName + " (" + weight + "g)";
-                document.getElementById('final-calories').value = Math.round(calories);
-                document.getElementById('final-protein').value = protein;
-                document.getElementById('precision-form').submit();
-            } else {
-                alert("Please select a food and enter a weight.");
+            const ok = await logEntry(foodName, calories, protein, true);
+            if (ok) {
+                weightInput.value = '';
+                calculateNutrients();            // resets the result display to 0
             }
         }
 
-        // Logic for Quick Add buttons
-        function quickAdd(name, cals, protein = 0) {
-            document.getElementById('food-input').value = name;
-            document.getElementById('calories-input').value = cals;
-
-            let protInput = document.getElementById('protein-input');
-            if(!protInput) {
-                protInput = document.createElement('input');
-                protInput.type = 'hidden';
-                protInput.name = 'protein';
-                protInput.id = 'protein-input';
-                document.getElementById('calorie-form').appendChild(protInput);
-            }
-            protInput.value = protein;
-            document.getElementById('calorie-form').submit();
-        }
+        // Quick Add buttons (delegated so buttons added later also work)
+        document.getElementById('quick-add-list').addEventListener('click', function (e) {
+            const btn = e.target.closest('.quick-btn');
+            if (!btn) return;
+            logEntry(btn.dataset.name, btn.dataset.calories, btn.dataset.protein || 0);
+        });
     </script>
 
 

@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect, url_for, session
+from flask import Flask, render_template, request, redirect, url_for, session, jsonify, flash
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime, date
 from authlib.integrations.flask_client import OAuth
@@ -53,17 +53,36 @@ class WeightEntry(db.Model):
     user_email = db.Column(db.String(120), nullable=False)
 
 
+DAILY_GOAL = 1700
+
+def wants_json():
+    """True when the request came from our fetch() calls (no page reload)."""
+    return request.headers.get('X-Requested-With') == 'fetch'
+
+def get_today_totals(user_email):
+    entries = CalorieEntry.query.filter(
+        db.func.date(CalorieEntry.date_created) == date.today(),
+        CalorieEntry.user_email == user_email
+    ).all()
+    total = sum(e.calories for e in entries)
+    return {
+        'total': total,
+        'total_protein': round(sum(e.protein for e in entries), 1),
+        'remaining': DAILY_GOAL - total,
+    }
+
 # 3. Routes
 @app.route('/', methods=['GET', 'POST'])
 def index():
     # 1. AUTH CHECK: Redirect to login if not authenticated
     if 'user' not in session:
+        if wants_json():
+            return jsonify(ok=False, error='Session expired - please reload and log in again.'), 401
         return redirect(url_for('login'))
 
     # Get the unique identifier for the logged-in user
     user_email = session['user']['email']
 
-    DAILY_GOAL = 1700
     today = date.today()
 
     # Handle Food Logging (Quick Add or Custom Add)
@@ -74,6 +93,14 @@ def index():
         prot = request.form.get('protein', 0)
 
         if food and cals:
+            try:
+                cals_int = int(float(cals))
+                prot_float = float(prot or 0)
+            except ValueError:
+                if wants_json():
+                    return jsonify(ok=False, error='Invalid calories or protein value.'), 400
+                return redirect('/')
+
             # Update Click Stats for reordering Quick Add buttons
             stat = QuickFoodStats.query.filter_by(food_name=food,user_email=user_email).first()
             if not stat:
@@ -82,15 +109,32 @@ def index():
             else:
                 stat.click_count += 1
 
-            # Ensure data types are correct for the DB
             new_entry = CalorieEntry(
                 food_item=food,
-                calories=int(float(cals)),
-                protein=float(prot),
+                calories=cals_int,
+                protein=prot_float,
                 user_email=user_email
             )
             db.session.add(new_entry)
             db.session.commit()
+
+            if wants_json():
+                return jsonify(
+                    ok=True,
+                    entry={
+                        'id': new_entry.id,
+                        'time': new_entry.date_created.strftime('%H:%M'),
+                        'food': new_entry.food_item,
+                        'calories': new_entry.calories,
+                        'protein': new_entry.protein,
+                    },
+                    **get_today_totals(user_email)
+                )
+
+            # No-JS fallback: the toast container on the page shows this after the redirect
+            flash(f"Added {food} ({cals_int} kcal)", 'success')
+        elif wants_json():
+            return jsonify(ok=False, error='Missing food or calories.'), 400
         return redirect('/')
 
     # --- UPDATED DATA FETCHING ---
@@ -102,9 +146,22 @@ def index():
         food_db = {}
 
     dynamic_quick_foods = QuickAddFood.query.filter_by(user_email=user_email).all()
-    stats_query = QuickFoodStats.query.filter_by(user_email=user_email).all()
-    stats = {s.food_name: s.click_count for s in stats_query}
-    sorted_foods = sorted(dynamic_quick_foods, key=lambda x: stats.get(x.name, 0), reverse=True)
+    # Order Quick Add buttons by most recently logged first. Recency comes from the log itself
+    # (every Quick Add / Precision Add creates a timestamped entry), so no extra column is needed.
+    last_logged = {}
+    rows = db.session.query(CalorieEntry.food_item, db.func.max(CalorieEntry.date_created)) \
+        .filter(CalorieEntry.user_email == user_email) \
+        .group_by(CalorieEntry.food_item).all()
+    for food_item, last_time in rows:
+        key = food_item.lower()  # MySQL groups case-insensitively, so match that way
+        if key not in last_logged or last_time > last_logged[key]:
+            last_logged[key] = last_time
+    # Never-logged items (e.g. just created in Settings) go after used ones, newest first
+    sorted_foods = sorted(
+        dynamic_quick_foods,
+        key=lambda x: (last_logged.get(x.name.lower(), datetime.min), x.id),
+        reverse=True
+    )
 
     # Current Day's Data
     entries = CalorieEntry.query.filter(
@@ -153,6 +210,40 @@ def add_quick_add():
 
         db.session.commit()
     return redirect('/manage_quick_add')
+
+@app.route('/api/quick_add', methods=['POST'])
+def api_quick_add():
+    """Save an item to Quick Add without leaving the page (used by the toast action)."""
+    if 'user' not in session:
+        return jsonify(ok=False, error='Session expired - please reload and log in again.'), 401
+
+    user_email = session['user']['email']
+    name = (request.form.get('name') or '').strip()
+    try:
+        cals = int(float(request.form.get('calories')))
+        prot = float(request.form.get('protein') or 0)
+    except (TypeError, ValueError):
+        return jsonify(ok=False, error='Invalid calories or protein value.'), 400
+    if not name:
+        return jsonify(ok=False, error='Missing name.'), 400
+
+    try:
+        item = QuickAddFood.query.filter_by(name=name, user_email=user_email).first()
+        created = item is None
+        if created:
+            item = QuickAddFood(name=name, calories=cals, protein=prot, user_email=user_email)
+            db.session.add(item)
+        else:
+            item.calories = cals
+            item.protein = prot
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        return jsonify(ok=False, error='Could not save that Quick Add item.'), 500
+
+    return jsonify(ok=True, created=created,
+                   item={'name': name, 'calories': cals, 'protein': prot})
+
 
 @app.route('/delete_quick_add/<int:item_id>')
 def delete_quick_add(item_id):
