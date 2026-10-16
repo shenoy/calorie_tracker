@@ -1,669 +1,439 @@
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Compound Effect : Calorie Tracker</title>
-    <link rel="icon" type="image/png" href="{{ url_for('static', filename='favicon.png') }}">
-    <style>
-    /* Default for Desktop */
-    body {
-        font-family: Arial, sans-serif;
-        margin: 0 auto;
-        padding: 20px;
-        max-width: 900px; /* Limits the app width on big screens */
-        background-color: #f4f4f9;
-    }
+{% extends "base.html" %}
+{% block title %}Today · Compound Effect{% endblock %}
 
-    .container {
-        background: white;
-        padding: 20px;
-        border-radius: 12px;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-    }
+{% block content %}
+{% set pct = (total / goal) if goal else 0 %}
+{% set state = 'over' if remaining < 0 else ('near' if pct >= 0.9 else 'ok') %}
 
-    /* Nav Buttons Styling */
-        .nav-btn {
-            padding: 12px 18px;
-            text-decoration: none;
-            border-radius: 10px;
-            font-weight: bold;
-            font-size: 14px;
-            transition: transform 0.2s;
-        }
-        .nav-btn:hover { transform: translateY(-2px); }
-
-        /* Big Wide Input Styling */
-        input[type="text"],
-        input[type="number"],
-        select {
-            width: 100%;
-            padding: 15px;
-            margin: 10px 0 20px 0;
-            display: inline-block;
-            border: 1px solid #ddd;
-            border-radius: 10px;
-            box-sizing: border-box;
-            font-size: 16px;
-            background-color: #f9f9f9;
-        }
-
-        input:focus {
-            border-color: #1a73e8;
-            outline: none;
-            background-color: #fff;
-        }
-
-        button[type="submit"], .action-btn {
-            width: 100%;
-            padding: 16px;
-            background-color: #1a73e8;
-            color: white;
-            font-weight: bold;
-            border: none;
-            border-radius: 10px;
-            cursor: pointer;
-            font-size: 16px;
-        }
-
-        /* Quick Add Buttons */
-        .quick-btn {
-            padding: 10px 15px;
-            background-color: #e8f0fe;
-            border: 1px solid #1a73e8;
-            border-radius: 20px;
-            color: #1a73e8;
-            font-weight: 500;
-            cursor: pointer;
-        }
-
-                /* Table Styling for Today's Log */
-        .log-table {
-            width: 100%;
-            border-collapse: collapse;
-            margin: 20px 0;
-            font-size: 15px;
-            border-radius: 10px;
-            overflow: hidden;
-        }
-
-        .log-table thead tr {
-            background-color: #1a73e8; /* Blue to match your Calorie Tracker theme */
-            color: #ffffff;
-            text-align: left;
-            font-weight: bold;
-        }
-
-        .log-table th, .log-table td {
-            padding: 12px 15px;
-            border-bottom: 1px solid #eee;
-        }
-
-        .log-table tbody tr:nth-of-type(even) {
-            background-color: #f8f9fa;
-        }
-
-        .log-table tbody tr:hover {
-            background-color: #f1f4f8;
-        }
-
-        .delete-btn {
-            color: #ea4335;
-            text-decoration: none;
-            font-weight: bold;
-            font-size: 18px;
-        }
-
-        .stats-grid {
-        display: flex;
-        gap: 15px;
-        margin-bottom: 30px;
-        flex-wrap: wrap; /* Allows cards to stack on small phones */
-        }
-
-        .stat-card {
-            flex: 1; /* Makes all cards the same width */
-            min-width: 150px;
-            padding: 20px;
-            border-radius: 15px;
-            text-align: center;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.05);
-            background: #fff;
-            border: 1px solid #eee;
-        }
-
-        .stat-value {
-            display: block;
-            font-size: 24px;
-            font-weight: 800;
-            margin-top: 5px;
-        }
-
-        .stat-label {
-            font-size: 12px;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            color: #666;
-            font-weight: 600;
-        }
-
-        details summary::-webkit-details-marker {
-            display: none; /* Hides the default tiny arrow */
-        }
-
-        details[open] summary {
-            border-bottom: 1px solid #eee;
-            margin-bottom: 10px;
-        }
-
-        details {
-            transition: all 0.3s ease;
-        }
-
-
-    /* Toasts (top-right) */
-    #flash-container {
-        display: flex;
-        flex-direction: column;
-        align-items: flex-end;
-        max-width: calc(100vw - 40px);
-        pointer-events: none; /* let clicks through the empty area */
-    }
-    .toast {
-        pointer-events: auto;
-        box-sizing: border-box;
-        width: 320px;
-        max-width: 100%;
-        padding: 14px 16px;
-        margin-bottom: 10px;
-        border-radius: 10px;
-        background: #fff;
-        color: #333;
-        font-weight: 500;
-        font-size: 14px;
-        box-shadow: 0 6px 18px rgba(0,0,0,0.18);
-        border-left: 5px solid #34a853;
-        animation: toast-in 0.25s ease-out;
-        transition: opacity 0.4s ease, transform 0.4s ease;
-    }
-    .toast.error { border-left-color: #ea4335; }
-    .toast.info  { border-left-color: #1a73e8; }
-    .toast.hide  { opacity: 0; transform: translateX(30px); }
-    .toast-row   { display: flex; align-items: flex-start; gap: 10px; }
-    .toast-msg   { flex: 1; line-height: 1.35; word-break: break-word; }
-    .toast-close {
-        width: auto !important; margin: 0 !important; padding: 0 4px !important;
-        background: none; border: none; color: #999; font-size: 20px; line-height: 1; cursor: pointer;
-    }
-    .toast-action {
-        width: auto !important; margin: 10px 0 0 0 !important; padding: 8px 12px !important;
-        background: #e8f0fe; color: #1a73e8; border: 1px solid #1a73e8; border-radius: 16px;
-        font-size: 13px; font-weight: 600; cursor: pointer;
-    }
-    .toast-action:disabled { opacity: 0.6; cursor: default; }
-    @keyframes toast-in {
-        from { opacity: 0; transform: translateX(40px); }
-        to   { opacity: 1; transform: translateX(0); }
-    }
-
-    /* Adjustments for Mobile (Screens smaller than 600px) */
-    @media (max-width: 600px) {
-        body {
-            padding: 10px;
-            max-width: 100%; /* Uses full width on phones */
-        }
-
-        .container {
-            padding: 15px;
-            border-radius: 0; /* Optional: square edges look better on mobile */
-        }
-
-        button {
-            width: 100%; /* Makes buttons easier to tap on mobile */
-            margin-bottom: 10px;
-        }
-    }
-</style>
-</head>
-<body>
-        <div id="flash-container" style="position: fixed; top: 20px; right: 20px; z-index: 1000; min-width: 250px;">
-        {% with messages = get_flashed_messages(with_categories=true) %}
-          {% if messages %}
-            {% for category, message in messages %}
-              <div class="flash-message" style="padding: 15px; margin-bottom: 10px; border-radius: 8px;
-                          box-shadow: 0 4px 12px rgba(0,0,0,0.15); border-left: 5px solid {{ '#34a853' if category == 'success' else '#1a73e8' }};
-                          background-color: white; color: #333; font-weight: 500;
-                          transition: opacity 0.5s ease-out;">
-                {{ '✅' if category == 'success' else 'ℹ️' }} {{ message }}
-              </div>
-            {% endfor %}
-          {% endif %}
-        {% endwith %}
+<section class="hero" id="hero" data-state="{{ state }}" aria-label="Daily status">
+    <div class="hero-date">{{ today_label }}</div>
+    <div class="ring">
+        <svg viewBox="0 0 120 120" aria-hidden="true">
+            <circle class="track" cx="60" cy="60" r="52" fill="none" stroke-width="11"/>
+            <circle class="bar" id="ring-bar" cx="60" cy="60" r="52" fill="none" stroke-width="11"
+                    stroke-dasharray="326.73" stroke-dashoffset="{{ '%.2f'|format(326.73 * (1 - ([pct, 1]|min))) }}"/>
+        </svg>
+        <div class="ring-center">
+            <div class="ring-num" id="stat-remaining">{{ remaining|abs }}</div>
+            <div class="ring-label" id="stat-remaining-label">{{ 'kcal left' if remaining >= 0 else 'kcal over' }}</div>
         </div>
-<div class="container">
-        <nav style="margin-bottom: 30px; display: flex; gap: 10px; flex-wrap: wrap;">
-            <a href="/history" class="nav-btn" style="background: #1a73e8; color: white;">📊 History</a>
-            <a href="/manage_library" class="nav-btn" style="background: #eee; color: #333;">📚 Library</a>
-            <a href="/manage_quick_add" class="nav-btn" style="background: #eee; color: #333;">⚙️ Settings</a>
-        </nav>
+    </div>
+    <dl class="hero-stats">
+        <div><dt>Eaten</dt><dd id="stat-total">{{ total }}</dd></div>
+        <div><dt>Daily goal</dt><dd>{{ goal }}</dd></div>
+        <div class="p"><dt>Protein</dt><dd id="stat-protein">{{ total_protein }}g</dd></div>
+    </dl>
+</section>
 
-        <h2 style="margin-bottom: 15px;">Daily Status</h2>
+<div class="section-head">
+    <h2>Quick add</h2>
+    <button type="button" class="link-btn" id="qa-toggle" hidden></button>
+</div>
+<div class="chips" id="quick-add-list">
+    {% for item in quick_foods %}
+    <button type="button" class="quick-btn" data-name="{{ item.name }}" data-calories="{{ item.calories }}" data-protein="{{ item.protein }}">
+        <span class="q-name">{{ item.name }}</span>
+        <span class="q-meta"><span>{{ item.calories }} kcal</span><span class="prot">{{ '%g'|format(item.protein) }}g</span></span>
+    </button>
+    {% endfor %}
+</div>
+{% if not quick_foods %}
+<p class="empty" id="qa-empty">No quick adds yet. Log something with Precision add and save it, or create one in <a href="/manage_quick_add">Quick adds</a>.</p>
+{% endif %}
 
-        <div class="stats-grid">
-            <div class="stat-card" style="border-top: 5px solid #1a73e8;">
-                <span class="stat-label">Daily Goal</span>
-                <span class="stat-value" style="color: #1a73e8;">{{ goal }}</span>
-            </div>
-
-            <div class="stat-card" style="border-top: 5px solid #fb8c00;">
-                <span class="stat-label">Total Consumed</span>
-                <span class="stat-value" id="stat-total" style="color: #fb8c00;">{{ total }}</span>
-            </div>
-
-            {% set status_color = '#34a853' if remaining >= 0 else '#ea4335' %}
-            <div class="stat-card" id="stat-remaining-card" style="border-top: 5px solid {{ status_color }}; background-color: {{ '#f0fff4' if remaining >= 0 else '#fff5f5' }};">
-                <span class="stat-label">Remaining</span>
-                <span class="stat-value" id="stat-remaining" style="color: {{ status_color }};">{{ remaining }}</span>
-            </div>
-            <div class="stat-card" style="border-top: 5px solid #9c27b0;">
-                <span class="stat-label">Total Protein</span>
-                <span class="stat-value" id="stat-protein" style="color: #9c27b0;">{{ total_protein }}g</span>
-            </div>
-        </div>
-
-        <hr style="border: 0; border-top: 1px solid #eee; margin: 25px 0;">
-
-
-       <details style="margin-top: 30px; border: 1px solid #ddd; border-radius: 12px; background: #fff; overflow: hidden;">
-            <summary style="padding: 15px; font-size: 1.2em; font-weight: bold; cursor: pointer; list-style: none; display: flex; justify-content: space-between; align-items: center; background: #f8f9fa;">
-                <span>🕒 Today's Log</span>
-                <span style="font-size: 0.8em; color: #1a73e8;">(Tap to view/hide)</span>
-            </summary>
-
-            <div style="padding: 10px; overflow-x: auto;">
-                <table class="log-table" style="margin: 0;">
-                    <thead>
-                        <tr>
-                            <th>Time</th>
-                            <th>Item</th>
-                            <th>Calories</th>
-                            <th>Protein</th>
-                            <th style="text-align: center;">Action</th>
-                        </tr>
-                    </thead>
-                    <tbody id="log-body">
-                        {% for entry in entries %}
-                        <tr>
-                            <td style="color: #666; width: 80px;">{{ entry.date_created.strftime('%H:%M') }}</td>
-                            <td><strong>{{ entry.food_item }}</strong></td>
-                            <td>{{ entry.calories }} <span style="font-size: 0.8em; color: #888;">kcal</span></td>
-                            <td style="color: #9c27b0; font-weight: bold;">{{ entry.protein }}g</td>
-                            <td style="text-align: center;">
-                                <a href="/delete/{{ entry.id }}" class="delete-btn" title="Delete entry">×</a>
-                            </td>
-                        </tr>
-                        {% endfor %}
-                        {% if not entries %}
-                        <tr id="no-entries-row">
-                            <td colspan="5" style="text-align: center; color: #999; padding: 20px;">No entries for today yet.</td>
-                        </tr>
-                        {% endif %}
-                    </tbody>
-                </table>
-            </div>
-        </details>
-
-        <h3>Quick Add</h3>
-        <div id="quick-add-list" style="display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 30px;">
-            {% for item in quick_foods %}
-                <button type="button" class="quick-btn" data-name="{{ item.name }}" data-calories="{{ item.calories }}" data-protein="{{ item.protein }}">
-                    + {{ item.name }}
-                </button>
-            {% endfor %}
-        </div>
-
-       <div style="padding: 20px; background: #f0f7ff; border-radius: 12px; border: 1px solid #d0e3ff;">
-            <h3 style="margin-top: 0;">Precision Add</h3>
-            <label>Select Item:</label>
+<section class="card" style="margin-top:28px">
+    <h2>Precision add</h2>
+    <p class="sub">Pick a food from your library and enter the weight.</p>
+    <div class="calc-row">
+        <div class="field">
+            <label for="calc-food">Food</label>
             <select id="calc-food" onchange="calculateNutrients()">
-                <option value="">-- Choose from Library --</option>
+                <option value="">Choose from library</option>
                 {% for food, values in food_db.items() %}
                     <option value='{{ values | tojson }}'>{{ food }}</option>
                 {% endfor %}
             </select>
-
-            <label>Weight (grams):</label>
-            <input type="number" id="calc-weight" placeholder="e.g. 150" oninput="calculateNutrients()">
-
-            <div style="font-size: 1.1em; margin-bottom: 15px; display: flex; gap: 20px;">
-                <div>Result: <strong id="calc-result" style="color: #1a73e8;">0</strong> kcal</div>
-                <div>Protein: <strong id="calc-protein-result" style="color: #9c27b0;">0</strong> g</div>
-            </div>
-
-            <form id="precision-form" method="POST">
-                <input type="hidden" name="food" id="final-food-name">
-                <input type="hidden" name="calories" id="final-calories">
-                <input type="hidden" name="protein" id="final-protein">
-                <button type="submit" onclick="submitPrecision(event)" class="action-btn">Add to Log</button>
-            </form>
         </div>
-
-        <div style="margin-top: 30px; padding: 20px; background: #f9f9f9; border-radius: 12px;">
-            <h3 style="margin-top: 0;">Update Weight</h3>
-            <form action="/update_weight" method="POST">
-                <input type="number" step="0.1" name="weight" placeholder="Current weight in kg (e.g. 75.5)" required>
-                <button type="submit" style="background: #5f6368;" class="action-btn">Save Weight</button>
-            </form>
-            <p style="margin-top: 10px;">Current: <strong>{{ current_weight }} kg</strong></p>
+        <div class="field">
+            <label for="calc-weight">Weight (g)</label>
+            <input type="number" id="calc-weight" inputmode="decimal" placeholder="e.g. 150" oninput="calculateNutrients()">
         </div>
     </div>
+    {% if not food_db %}<p class="muted" style="margin:12px 0 0;font-size:15px">Your library is empty. <a href="/manage_library">Add foods to your library</a> to use this.</p>{% endif %}
 
-     <script>
-        // Logic for Precision Add calculation
-        function calculateNutrients() {
-            const foodDataRaw = document.getElementById('calc-food').value;
-            const weight = document.getElementById('calc-weight').value;
-            const calDisplay = document.getElementById('calc-result');
-            const protDisplay = document.getElementById('calc-protein-result');
+    <div class="calc-result" aria-live="polite">
+        <div class="calc-tile k"><span>Calories</span><strong id="calc-result">0</strong> <small class="muted">kcal</small></div>
+        <div class="calc-tile p"><span>Protein</span><strong id="calc-protein-result">0</strong> <small class="muted">g</small></div>
+    </div>
 
-            if (foodDataRaw && weight > 0) {
-                const data = JSON.parse(foodDataRaw);
-                const totalCals = (weight / 100) * data[0];
-                const totalProt = (weight / 100) * data[1];
+    <form id="precision-form" method="POST">
+        <input type="hidden" name="food" id="final-food-name">
+        <input type="hidden" name="calories" id="final-calories">
+        <input type="hidden" name="protein" id="final-protein">
+        <button type="submit" onclick="submitPrecision(event)" class="btn btn-block">Add to log</button>
+    </form>
+</section>
 
-                calDisplay.innerText = totalCals.toFixed(1);
-                protDisplay.innerText = totalProt.toFixed(1);
-            } else {
-                calDisplay.innerText = "0";
-                protDisplay.innerText = "0";
-            }
-        }
+<details class="collapse" style="margin-top:16px">
+    <summary>
+        Today's log <span class="badge" id="log-count">{{ entries|length }}</span>
+        <svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+    </summary>
+    <div class="collapse-body table-scroll">
+        <table class="data-table">
+            <thead>
+                <tr><th>Time</th><th>Item</th><th class="num">kcal</th><th class="num">Protein</th><th class="t-act"><span class="sr-only">Delete</span></th></tr>
+            </thead>
+            <tbody id="log-body">
+                {% for entry in entries %}
+                <tr>
+                    <td class="t-time">{{ entry.date_created.strftime('%H:%M') }}</td>
+                    <td><strong>{{ entry.food_item }}</strong></td>
+                    <td class="num">{{ entry.calories }}</td>
+                    <td class="num prot">{{ entry.protein }}g</td>
+                    <td class="t-act"><a href="/delete/{{ entry.id }}" class="delete-btn" title="Delete entry" aria-label="Delete {{ entry.food_item }}">×</a></td>
+                </tr>
+                {% endfor %}
+                {% if not entries %}
+                <tr id="no-entries-row"><td colspan="5" class="muted" style="text-align:center;padding:22px">Nothing logged today yet.</td></tr>
+                {% endif %}
+            </tbody>
+        </table>
+    </div>
+</details>
 
-        // ---------- Sound ----------
-        let audioCtx = null;
-        function getAudioCtx() {
-            // Must be created/resumed inside a tap/click so the browser allows playback
-            try {
-                if (!audioCtx) {
-                    const AC = window.AudioContext || window.webkitAudioContext;
-                    if (!AC) return null;
-                    audioCtx = new AC();
-                }
-                if (audioCtx.state === 'suspended') audioCtx.resume();
-                return audioCtx;
-            } catch (e) { return null; }
-        }
-
-        function playTones(notes) {
-            const ctx = getAudioCtx();
-            if (!ctx) return;
-            const now = ctx.currentTime;
-            notes.forEach(([freq, offset]) => {
-                const osc = ctx.createOscillator();
-                const gain = ctx.createGain();
-                osc.type = 'sine';
-                osc.frequency.value = freq;
-                gain.gain.setValueAtTime(0.0001, now + offset);
-                gain.gain.exponentialRampToValueAtTime(0.25, now + offset + 0.01);
-                gain.gain.exponentialRampToValueAtTime(0.0001, now + offset + 0.35);
-                osc.connect(gain);
-                gain.connect(ctx.destination);
-                osc.start(now + offset);
-                osc.stop(now + offset + 0.4);
-            });
-        }
-        const playSuccess = () => playTones([[659.25, 0], [987.77, 0.09]]);  // E5 -> B5 chime
-        const playError   = () => playTones([[330, 0], [247, 0.12]]);        // low double tone
-
-        // ---------- Toasts ----------
-        function showToast(message, opts = {}) {
-            const { type = 'success', duration = 3500, actionLabel = null, onAction = null } = opts;
-            const container = document.getElementById('flash-container');
-            const toast = document.createElement('div');
-            toast.className = 'toast ' + type;
-
-            const row = document.createElement('div');
-            row.className = 'toast-row';
-            const msg = document.createElement('div');
-            msg.className = 'toast-msg';
-            msg.textContent = (type === 'error' ? '⚠️ ' : '✅ ') + message;
-            const close = document.createElement('button');
-            close.type = 'button';
-            close.className = 'toast-close';
-            close.setAttribute('aria-label', 'Dismiss');
-            close.textContent = '×';
-            row.appendChild(msg);
-            row.appendChild(close);
-            toast.appendChild(row);
-
-            let timer;
-            function dismiss() {
-                clearTimeout(timer);
-                toast.classList.add('hide');
-                setTimeout(() => toast.remove(), 400);
-            }
-            close.addEventListener('click', dismiss);
-
-            if (actionLabel && onAction) {
-                const action = document.createElement('button');
-                action.type = 'button';
-                action.className = 'toast-action';
-                action.textContent = actionLabel;
-                action.addEventListener('click', async () => {
-                    getAudioCtx();               // keep audio unlocked for the confirmation chime
-                    action.disabled = true;
-                    clearTimeout(timer);
-                    await onAction();
-                    dismiss();
-                });
-                toast.appendChild(action);
-            }
-
-            container.appendChild(toast);
-            timer = setTimeout(dismiss, duration);
-            return toast;
-        }
-
-        // ---------- Page updates (no reload) ----------
-        function updateDashboard(data) {
-            document.getElementById('stat-total').textContent = data.total;
-            document.getElementById('stat-remaining').textContent = data.remaining;
-            document.getElementById('stat-protein').textContent = data.total_protein + 'g';
-
-            const over = data.remaining < 0;
-            const color = over ? '#ea4335' : '#34a853';
-            const card = document.getElementById('stat-remaining-card');
-            card.style.borderTop = '5px solid ' + color;
-            card.style.backgroundColor = over ? '#fff5f5' : '#f0fff4';
-            document.getElementById('stat-remaining').style.color = color;
-
-            // Add the new row to Today's Log
-            const empty = document.getElementById('no-entries-row');
-            if (empty) empty.remove();
-            const e = data.entry;
-            const tr = document.createElement('tr');
-
-            const tdTime = document.createElement('td');
-            tdTime.style.cssText = 'color: #666; width: 80px;';
-            tdTime.textContent = e.time;
-
-            const tdItem = document.createElement('td');
-            const strong = document.createElement('strong');
-            strong.textContent = e.food;
-            tdItem.appendChild(strong);
-
-            const tdCal = document.createElement('td');
-            tdCal.textContent = e.calories + ' ';
-            const unit = document.createElement('span');
-            unit.style.cssText = 'font-size: 0.8em; color: #888;';
-            unit.textContent = 'kcal';
-            tdCal.appendChild(unit);
-
-            const tdProt = document.createElement('td');
-            tdProt.style.cssText = 'color: #9c27b0; font-weight: bold;';
-            tdProt.textContent = e.protein + 'g';
-
-            const tdAct = document.createElement('td');
-            tdAct.style.textAlign = 'center';
-            const del = document.createElement('a');
-            del.href = '/delete/' + e.id;
-            del.className = 'delete-btn';
-            del.title = 'Delete entry';
-            del.textContent = '×';
-            tdAct.appendChild(del);
-
-            [tdTime, tdItem, tdCal, tdProt, tdAct].forEach(td => tr.appendChild(td));
-            document.getElementById('log-body').appendChild(tr);
-        }
-
-        function quickAddExists(name) {
-            return Array.from(document.querySelectorAll('#quick-add-list .quick-btn'))
-                        .some(b => b.dataset.name === name);
-        }
-
-        // Move the button for a just-used item to the front of the list
-        function moveQuickAddToFront(name) {
-            const list = document.getElementById('quick-add-list');
-            const btn = Array.from(list.querySelectorAll('.quick-btn')).find(b => b.dataset.name === name);
-            if (btn && list.firstElementChild !== btn) list.prepend(btn);
-        }
-
-        function addQuickAddButton(item) {
-            const btn = document.createElement('button');
-            btn.type = 'button';
-            btn.className = 'quick-btn';
-            btn.dataset.name = item.name;
-            btn.dataset.calories = item.calories;
-            btn.dataset.protein = item.protein;
-            btn.textContent = '+ ' + item.name;
-            document.getElementById('quick-add-list').prepend(btn);  // newest first
-        }
-
-        // ---------- Actions ----------
-        let logging = false;
-        async function logEntry(name, calories, protein, offerQuickAdd = false) {
-            if (logging) return false;           // ignore double taps while a request is in flight
-            logging = true;
-            getAudioCtx();                       // unlock audio while we still have the user's tap
-            try {
-                const fd = new FormData();
-                fd.append('food', name);
-                fd.append('calories', calories);
-                fd.append('protein', protein);
-                const res = await fetch('/', {
-                    method: 'POST',
-                    body: fd,
-                    headers: { 'X-Requested-With': 'fetch' },
-                    credentials: 'same-origin'
-                });
-                const data = await res.json().catch(() => ({}));
-                if (!res.ok || !data.ok) throw new Error(data.error || 'Could not add that entry.');
-
-                updateDashboard(data);
-                moveQuickAddToFront(data.entry.food);
-                playSuccess();
-
-                const msg = 'Added ' + data.entry.food + ' · ' + data.entry.calories + ' kcal';
-                if (offerQuickAdd && !quickAddExists(data.entry.food)) {
-                    showToast(msg, {
-                        duration: 9000,
-                        actionLabel: '⭐ Save to Quick Add',
-                        onAction: () => saveToQuickAdd(data.entry.food, data.entry.calories, data.entry.protein)
-                    });
-                } else {
-                    showToast(msg);
-                }
-                return true;
-            } catch (err) {
-                playError();
-                showToast(err.message || 'Something went wrong.', { type: 'error', duration: 5000 });
-                return false;
-            } finally {
-                logging = false;
-            }
-        }
-
-        async function saveToQuickAdd(name, calories, protein) {
-            try {
-                const fd = new FormData();
-                fd.append('name', name);
-                fd.append('calories', calories);
-                fd.append('protein', protein);
-                const res = await fetch('/api/quick_add', {
-                    method: 'POST',
-                    body: fd,
-                    headers: { 'X-Requested-With': 'fetch' },
-                    credentials: 'same-origin'
-                });
-                const data = await res.json().catch(() => ({}));
-                if (!res.ok || !data.ok) throw new Error(data.error || 'Could not save to Quick Add.');
-
-                if (!quickAddExists(data.item.name)) addQuickAddButton(data.item);
-                playSuccess();
-                showToast('Saved "' + data.item.name + '" to Quick Add');
-            } catch (err) {
-                playError();
-                showToast(err.message || 'Something went wrong.', { type: 'error', duration: 5000 });
-            }
-        }
-
-        async function submitPrecision(event) {
-            event.preventDefault();
-            const foodSelect = document.getElementById('calc-food');
-            const weightInput = document.getElementById('calc-weight');
-            const weight = weightInput.value;
-
-            if (!(weight > 0) || foodSelect.value === "") {
-                alert("Please select a food and enter a weight.");
-                return;
-            }
-
-            const foodName = foodSelect.options[foodSelect.selectedIndex].text + " (" + weight + "g)";
-            const calories = Math.round(document.getElementById('calc-result').innerText);
-            const protein = document.getElementById('calc-protein-result').innerText;
-
-            const ok = await logEntry(foodName, calories, protein, true);
-            if (ok) {
-                weightInput.value = '';
-                calculateNutrients();            // resets the result display to 0
-            }
-        }
-
-        // Quick Add buttons (delegated so buttons added later also work)
-        document.getElementById('quick-add-list').addEventListener('click', function (e) {
-            const btn = e.target.closest('.quick-btn');
-            if (!btn) return;
-            logEntry(btn.dataset.name, btn.dataset.calories, btn.dataset.protein || 0);
-        });
-    </script>
-
-
-        <form action="/update_weight" method="POST" style="margin-top: 20px; padding: 15px; background: #f9f9f9; border-radius: 10px;">
-            <label for="weight"><strong>Update Today's Weight (kg):</strong></label><br>
-            <input type="number" step="0.1" name="weight" id="weight" placeholder="e.g. 75.5" required>
-            <button type="submit">Save Weight</button>
-        </form>
-        <div style="margin-top: 20px; padding: 10px; border: 1px solid #ddd; border-radius: 8px;">
-        <strong>Today's Weight:</strong> {{ current_weight }} kg
+<section class="card" style="margin-top:16px">
+    <h2>Weight</h2>
+    <form action="/update_weight" method="POST" class="weight-form" style="margin-top:14px">
+        <div class="field">
+            <label for="weight">Today's weight (kg)</label>
+            <input type="number" step="0.1" name="weight" id="weight" inputmode="decimal" placeholder="e.g. 75.5" required>
         </div>
-        <div style="margin-top: 30px; padding: 15px; background: #eef2f7; border-radius: 10px;">
-</div>
-</div>
+        <button type="submit" class="btn">Save weight</button>
+    </form>
+    <p class="weight-now">
+        {% if current_weight == 'Not set' %}Not logged today.{% else %}Logged today: <strong>{{ current_weight }} kg</strong>{% endif %}
+    </p>
+</section>
+{% endblock %}
 
+{% block scripts %}
 <script>
-    // Wait for the page to load
-    document.addEventListener('DOMContentLoaded', function() {
-        const messages = document.querySelectorAll('.flash-message');
+    const GOAL = {{ goal }};
+    const RING_CIRC = 326.73;
 
-        messages.forEach(function(msg) {
-            // Set a timer to start fading after 4.5 seconds
-            setTimeout(function() {
-                msg.style.opacity = '0';
-                // Remove from DOM entirely after the fade finishes (at 5 seconds)
-                setTimeout(function() {
-                    msg.remove();
-                }, 500);
-            }, 4500);
+    // ---------- Precision calculation ----------
+    function calculateNutrients() {
+        const foodDataRaw = document.getElementById('calc-food').value;
+        const weight = document.getElementById('calc-weight').value;
+        const calDisplay = document.getElementById('calc-result');
+        const protDisplay = document.getElementById('calc-protein-result');
+
+        if (foodDataRaw && weight > 0) {
+            const data = JSON.parse(foodDataRaw);
+            calDisplay.innerText = ((weight / 100) * data[0]).toFixed(1);
+            protDisplay.innerText = ((weight / 100) * data[1]).toFixed(1);
+        } else {
+            calDisplay.innerText = "0";
+            protDisplay.innerText = "0";
+        }
+    }
+
+    // ---------- Sound ----------
+    let audioCtx = null;
+    function getAudioCtx() {
+        // Must be created/resumed inside a tap/click so the browser allows playback
+        try {
+            if (!audioCtx) {
+                const AC = window.AudioContext || window.webkitAudioContext;
+                if (!AC) return null;
+                audioCtx = new AC();
+            }
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            return audioCtx;
+        } catch (e) { return null; }
+    }
+
+    function playTones(notes) {
+        const ctx = getAudioCtx();
+        if (!ctx) return;
+        const now = ctx.currentTime;
+        notes.forEach(([freq, offset]) => {
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.type = 'sine';
+            osc.frequency.value = freq;
+            gain.gain.setValueAtTime(0.0001, now + offset);
+            gain.gain.exponentialRampToValueAtTime(0.25, now + offset + 0.01);
+            gain.gain.exponentialRampToValueAtTime(0.0001, now + offset + 0.35);
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.start(now + offset);
+            osc.stop(now + offset + 0.4);
         });
+    }
+    const playSuccess = () => playTones([[659.25, 0], [987.77, 0.09]]);  // E5 -> B5 chime
+    const playError   = () => playTones([[330, 0], [247, 0.12]]);        // low double tone
+
+    // ---------- Toasts ----------
+    function showToast(message, opts = {}) {
+        const { type = 'success', duration = 3500, actionLabel = null, onAction = null } = opts;
+        const container = document.getElementById('flash-container');
+        const toast = document.createElement('div');
+        toast.className = 'toast ' + type;
+
+        const row = document.createElement('div');
+        row.className = 'toast-row';
+        const icon = document.createElement('span');
+        icon.className = 'toast-icon';
+        icon.textContent = type === 'error' ? '!' : '✓';
+        const msg = document.createElement('div');
+        msg.className = 'toast-msg';
+        msg.textContent = message;
+        const close = document.createElement('button');
+        close.type = 'button';
+        close.className = 'toast-close';
+        close.setAttribute('aria-label', 'Dismiss');
+        close.textContent = '×';
+        row.appendChild(icon);
+        row.appendChild(msg);
+        row.appendChild(close);
+        toast.appendChild(row);
+
+        let timer;
+        function dismiss() {
+            clearTimeout(timer);
+            toast.classList.add('hide');
+            setTimeout(() => toast.remove(), 400);
+        }
+        close.addEventListener('click', dismiss);
+
+        if (actionLabel && onAction) {
+            const action = document.createElement('button');
+            action.type = 'button';
+            action.className = 'toast-action';
+            action.textContent = actionLabel;
+            action.addEventListener('click', async () => {
+                getAudioCtx();               // keep audio unlocked for the confirmation chime
+                action.disabled = true;
+                clearTimeout(timer);
+                await onAction();
+                dismiss();
+            });
+            toast.appendChild(action);
+        }
+
+        container.appendChild(toast);
+        timer = setTimeout(dismiss, duration);
+        return toast;
+    }
+
+    // ---------- Page updates (no reload) ----------
+    function updateDashboard(data) {
+        document.getElementById('stat-total').textContent = data.total;
+        document.getElementById('stat-protein').textContent = data.total_protein + 'g';
+        document.getElementById('stat-remaining').textContent = Math.abs(data.remaining);
+        document.getElementById('stat-remaining-label').textContent = data.remaining < 0 ? 'kcal over' : 'kcal left';
+
+        const pct = GOAL > 0 ? data.total / GOAL : 0;
+        document.getElementById('ring-bar').style.strokeDashoffset = (RING_CIRC * (1 - Math.min(pct, 1))).toFixed(2);
+        document.getElementById('hero').dataset.state = data.remaining < 0 ? 'over' : (pct >= 0.9 ? 'near' : 'ok');
+
+        // Add the new row to Today's log
+        const empty = document.getElementById('no-entries-row');
+        if (empty) empty.remove();
+        const e = data.entry;
+        const tr = document.createElement('tr');
+
+        const tdTime = document.createElement('td');
+        tdTime.className = 't-time';
+        tdTime.textContent = e.time;
+
+        const tdItem = document.createElement('td');
+        const strong = document.createElement('strong');
+        strong.textContent = e.food;
+        tdItem.appendChild(strong);
+
+        const tdCal = document.createElement('td');
+        tdCal.className = 'num';
+        tdCal.textContent = e.calories;
+
+        const tdProt = document.createElement('td');
+        tdProt.className = 'num prot';
+        tdProt.textContent = e.protein + 'g';
+
+        const tdAct = document.createElement('td');
+        tdAct.className = 't-act';
+        const del = document.createElement('a');
+        del.href = '/delete/' + e.id;
+        del.className = 'delete-btn';
+        del.title = 'Delete entry';
+        del.setAttribute('aria-label', 'Delete ' + e.food);
+        del.textContent = '×';
+        tdAct.appendChild(del);
+
+        [tdTime, tdItem, tdCal, tdProt, tdAct].forEach(td => tr.appendChild(td));
+        document.getElementById('log-body').appendChild(tr);
+
+        const count = document.getElementById('log-count');
+        count.textContent = document.querySelectorAll('#log-body tr').length;
+    }
+
+    // ---------- Quick add list ----------
+    const QA_LIMIT = 10;
+    let qaExpanded = false;
+
+    function refreshQuickAddList() {
+        const list = document.getElementById('quick-add-list');
+        const toggle = document.getElementById('qa-toggle');
+        const n = list.querySelectorAll('.quick-btn').length;
+        const empty = document.getElementById('qa-empty');
+        if (empty && n > 0) empty.remove();
+        list.classList.toggle('collapsed', n > QA_LIMIT && !qaExpanded);
+        toggle.hidden = n <= QA_LIMIT;
+        toggle.textContent = qaExpanded ? 'Show fewer' : 'Show all ' + n;
+    }
+    document.getElementById('qa-toggle').addEventListener('click', () => {
+        qaExpanded = !qaExpanded;
+        refreshQuickAddList();
     });
+
+    function quickAddExists(name) {
+        return Array.from(document.querySelectorAll('#quick-add-list .quick-btn'))
+                    .some(b => b.dataset.name === name);
+    }
+
+    // Move the button for a just-used item to the front of the list
+    function moveQuickAddToFront(name) {
+        const list = document.getElementById('quick-add-list');
+        const btn = Array.from(list.querySelectorAll('.quick-btn')).find(b => b.dataset.name === name);
+        if (btn && list.firstElementChild !== btn) list.prepend(btn);
+    }
+
+    function addQuickAddButton(item) {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'quick-btn';
+        btn.dataset.name = item.name;
+        btn.dataset.calories = item.calories;
+        btn.dataset.protein = item.protein;
+
+        const name = document.createElement('span');
+        name.className = 'q-name';
+        name.textContent = item.name;
+        const meta = document.createElement('span');
+        meta.className = 'q-meta';
+        const kcal = document.createElement('span');
+        kcal.textContent = item.calories + ' kcal';
+        const prot = document.createElement('span');
+        prot.className = 'prot';
+        prot.textContent = Number(item.protein) + 'g';
+        meta.appendChild(kcal);
+        meta.appendChild(prot);
+        btn.appendChild(name);
+        btn.appendChild(meta);
+
+        document.getElementById('quick-add-list').prepend(btn);  // newest first
+        refreshQuickAddList();
+    }
+
+    // ---------- Actions ----------
+    let logging = false;
+    async function logEntry(name, calories, protein, offerQuickAdd = false) {
+        if (logging) return false;           // ignore double taps while a request is in flight
+        logging = true;
+        getAudioCtx();                       // unlock audio while we still have the user's tap
+        try {
+            const fd = new FormData();
+            fd.append('food', name);
+            fd.append('calories', calories);
+            fd.append('protein', protein);
+            const res = await fetch('/', {
+                method: 'POST',
+                body: fd,
+                headers: { 'X-Requested-With': 'fetch' },
+                credentials: 'same-origin'
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok || !data.ok) throw new Error(data.error || 'Could not add that entry.');
+
+            updateDashboard(data);
+            moveQuickAddToFront(data.entry.food);
+            playSuccess();
+
+            const msg = 'Added ' + data.entry.food + ': ' + data.entry.calories + ' kcal';
+            if (offerQuickAdd && !quickAddExists(data.entry.food)) {
+                showToast(msg, {
+                    duration: 9000,
+                    actionLabel: 'Save as quick add',
+                    onAction: () => saveToQuickAdd(data.entry.food, data.entry.calories, data.entry.protein)
+                });
+            } else {
+                showToast(msg);
+            }
+            return true;
+        } catch (err) {
+            playError();
+            showToast(err.message || 'Something went wrong.', { type: 'error', duration: 5000 });
+            return false;
+        } finally {
+            logging = false;
+        }
+    }
+
+    async function saveToQuickAdd(name, calories, protein) {
+        try {
+            const fd = new FormData();
+            fd.append('name', name);
+            fd.append('calories', calories);
+            fd.append('protein', protein);
+            const res = await fetch('/api/quick_add', {
+                method: 'POST',
+                body: fd,
+                headers: { 'X-Requested-With': 'fetch' },
+                credentials: 'same-origin'
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok || !data.ok) throw new Error(data.error || 'Could not save to Quick add.');
+
+            if (!quickAddExists(data.item.name)) addQuickAddButton(data.item);
+            playSuccess();
+            showToast('Saved "' + data.item.name + '" to Quick add');
+        } catch (err) {
+            playError();
+            showToast(err.message || 'Something went wrong.', { type: 'error', duration: 5000 });
+        }
+    }
+
+    async function submitPrecision(event) {
+        event.preventDefault();
+        const foodSelect = document.getElementById('calc-food');
+        const weightInput = document.getElementById('calc-weight');
+        const weight = weightInput.value;
+
+        if (!(weight > 0) || foodSelect.value === "") {
+            showToast('Choose a food and enter a weight first.', { type: 'error', duration: 4000 });
+            return;
+        }
+
+        const foodName = foodSelect.options[foodSelect.selectedIndex].text + " (" + weight + "g)";
+        const calories = Math.round(document.getElementById('calc-result').innerText);
+        const protein = document.getElementById('calc-protein-result').innerText;
+
+        const ok = await logEntry(foodName, calories, protein, true);
+        if (ok) {
+            weightInput.value = '';
+            calculateNutrients();            // resets the result display to 0
+        }
+    }
+
+    // Quick add buttons (delegated so buttons added later also work)
+    document.getElementById('quick-add-list').addEventListener('click', function (e) {
+        const btn = e.target.closest('.quick-btn');
+        if (!btn) return;
+        logEntry(btn.dataset.name, btn.dataset.calories, btn.dataset.protein || 0);
+    });
+
+    refreshQuickAddList();
 </script>
-</body>
-</html>
+{% endblock %}

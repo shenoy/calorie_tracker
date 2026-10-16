@@ -1,68 +1,71 @@
-<style>
-    body {
-        font-family: Arial, sans-serif;
-        margin: 0 auto;
-        padding: 20px;
-        max-width: 900px; /* This keeps it from stretching to the whole page */
-        background-color: #f4f4f9;
-    }
+{% extends "base.html" %}
+{% block title %}Quick adds · Compound Effect{% endblock %}
 
-    .container {
-        background: white;
-        padding: 20px;
-        border-radius: 12px;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-    }
-</style>
-<div class="container">
-    <a href="/">⬅ Back to Dashboard</a>
-    <h1>Manage Quick Add Buttons</h1>
-    <br>
-
-    <form id="quick-add-form" action="/add_quick_add" method="POST" style="margin-bottom: 15px; display: flex; gap: 8px; flex-wrap: wrap;">
-        <input type="text" name="name" id="edit-name" placeholder="Item Name (e.g. Eggs x2)" required style="flex: 1; padding: 10px;">
-        <input type="number" name="calories" id="edit-cals" placeholder="Cals" required style="width: 80px; padding: 10px;">
-        <input type="number" step="0.1" name="protein" id="edit-prot" placeholder="Prot" required style="width: 80px; padding: 10px;">
-        <button type="submit" id="submit-btn" style="background-color: #1a73e8; color: white; border: none; padding: 10px 15px; border-radius: 5px; cursor: pointer;">Add Button</button>
-    </form>
-
-    <div style="max-height: 450px; overflow-y: auto; border: 1px solid #ddd; padding: 10px; border-radius: 8px;">
-        {% for item in all_quick_add_items %}
-            <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid #eee;">
-                <span>
-                    <strong>{{ item.name }}</strong>
-                    <span style="margin-left: 10px; color: #666;">{{ item.calories }} kcal</span>
-                    <span style="margin-left: 10px; color: #9c27b0; font-weight: bold;">{{ item.protein }}g Prot</span>
-                </span>
-                
-                <div style="display: flex; gap: 15px; align-items: center;">
-                    <button type="button" 
-                            onclick="editQuickItem('{{ item.name }}', '{{ item.calories }}', '{{ item.protein }}')"
-                            style="background: none; border: none; color: #1a73e8; cursor: pointer; font-weight: bold; font-size: 0.9em;">
-                        Edit
-                    </button>
-
-                    <a href="/delete_quick_add/{{ item.id }}" style="color: #ea4335; text-decoration: none; font-weight: bold;">[x]</a>
-                </div>
-            </div>
-        {% endfor %}
-    </div>
+{% block content %}
+<div class="page-head">
+    <h1>Quick adds</h1>
+    <p>One-tap buttons on the Today screen. The ones you used most recently appear first.</p>
 </div>
 
+<form class="card" id="quick-add-form" action="/add_quick_add" method="POST">
+    <h2 id="form-title">New quick add</h2>
+    <div class="form-grid" style="margin-top:14px">
+        <div class="field span-6"><label for="edit-name">Name</label>
+            <input type="text" name="name" id="edit-name" placeholder="e.g. Eggs (2)" required></div>
+        <div class="field span-3"><label for="edit-cals">Calories</label>
+            <input type="number" name="calories" id="edit-cals" inputmode="numeric" required></div>
+        <div class="field span-3"><label for="edit-prot">Protein (g)</label>
+            <input type="number" step="0.1" name="protein" id="edit-prot" inputmode="decimal" required></div>
+        <div class="form-actions span-6">
+            <button type="submit" id="submit-btn" class="btn">Add quick add</button>
+            <button type="button" id="cancel-btn" class="btn btn-ghost" onclick="resetForm()" hidden>Cancel</button>
+        </div>
+    </div>
+</form>
+
+<div class="section-head"><h2>Your quick adds</h2></div>
+{% if all_quick_add_items %}
+<section class="card" style="padding:6px 20px">
+    <ul class="item-list">
+        {% for item in all_quick_add_items %}
+        <li>
+            <div>
+                <div class="item-name">{{ item.name }}</div>
+                <div class="item-meta"><span>{{ item.calories }} kcal</span><span class="prot">{{ '%g'|format(item.protein) }}g protein</span></div>
+            </div>
+            <div class="row-actions">
+                <button type="button" class="btn btn-ghost btn-sm"
+                        data-name="{{ item.name }}" data-cals="{{ item.calories }}" data-prot="{{ item.protein }}"
+                        onclick="editQuickItem(this)">Edit</button>
+                <a href="/delete_quick_add/{{ item.id }}" class="btn btn-danger btn-sm"
+                   data-name="{{ item.name }}" onclick="return confirm('Delete ' + this.dataset.name + '?')">Delete</a>
+            </div>
+        </li>
+        {% endfor %}
+    </ul>
+</section>
+{% else %}
+<p class="empty">No quick adds yet. Create your first one above.</p>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
 <script>
-function editQuickItem(name, cals, protein) {
-    // Fill the inputs
-    document.getElementById('edit-name').value = name;
-    document.getElementById('edit-cals').value = cals;
-    document.getElementById('edit-prot').value = protein;
-    
-    // Visual feedback: change button color and text
-    const btn = document.getElementById('submit-btn');
-    btn.innerText = "Update Button";
-    btn.style.backgroundColor = "#34a853"; // Green for update
-    
-    // Focus and scroll
+function editQuickItem(btn) {
+    document.getElementById('edit-name').value = btn.dataset.name;
+    document.getElementById('edit-cals').value = btn.dataset.cals;
+    document.getElementById('edit-prot').value = btn.dataset.prot;
+    document.getElementById('form-title').textContent = 'Edit quick add';
+    document.getElementById('submit-btn').textContent = 'Save changes';
+    document.getElementById('cancel-btn').hidden = false;
     document.getElementById('edit-name').focus();
-    window.scrollTo({top: 0, behavior: 'smooth'});
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+function resetForm() {
+    document.getElementById('quick-add-form').reset();
+    document.getElementById('form-title').textContent = 'New quick add';
+    document.getElementById('submit-btn').textContent = 'Add quick add';
+    document.getElementById('cancel-btn').hidden = true;
 }
 </script>
+{% endblock %}

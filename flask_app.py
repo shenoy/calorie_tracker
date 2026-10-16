@@ -185,7 +185,8 @@ def index():
                            all_quick_add_items=dynamic_quick_foods,
                            library_items_list=library_items,
                            current_weight=current_weight,
-                           food_db=food_db)
+                           food_db=food_db,
+                           today_label=today.strftime('%A %d %B'))
 
 @app.route('/add_quick_add', methods=['POST'])
 def add_quick_add():
@@ -378,11 +379,11 @@ def add_to_library():
     if name and cals:
         existing_food = FoodLibrary.query.filter_by(name=name, user_email=user_email).first()
         if existing_food:
-            existing_food.calories_per_100g = int(cals)
+            existing_food.calories_per_100g = int(round(float(cals)))
             existing_food.protein_per_100g = float(prot)
         else:
             # ADDED user_email=user_email HERE
-            new_food = FoodLibrary(name=name, calories_per_100g=int(cals),
+            new_food = FoodLibrary(name=name, calories_per_100g=int(round(float(cals))),
                                    protein_per_100g=float(prot), user_email=user_email)
             db.session.add(new_food)
 

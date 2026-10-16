@@ -1,74 +1,89 @@
-<style>
-    body {
-        font-family: Arial, sans-serif;
-        margin: 0 auto;
-        padding: 20px;
-        max-width: 900px; /* This keeps it from stretching to the whole page */
-        background-color: #f4f4f9;
-    }
+{% extends "base.html" %}
+{% block title %}Library · Compound Effect{% endblock %}
 
-    .container {
-        background: white;
-        padding: 20px;
-        border-radius: 12px;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-    }
-</style>
-<div class="container">
-    <a href="/">⬅ Back to Dashboard</a>
-    <h1>Food Library Manager</h1>
-    <p><small>Add foods here to use them in the Precision Calculator.</small></p>
-
-    <form action="/add_to_library" method="POST" style="margin-bottom: 20px; display: flex; gap: 10px; flex-wrap: wrap;">
-        <input type="text" name="library_name" placeholder="Food Name (e.g. Banana)" required style="flex: 2; padding: 10px;">
-        <input type="number" step="0.1" name="library_cals" placeholder="Cals/100g" required style="width: 110px; padding: 10px;">
-        <input type="number" step="0.1" name="library_protein" placeholder="Prot/100g" required style="width: 110px; padding: 10px;">
-        <button type="submit" style="padding: 10px 20px; background-color: #1a73e8; color: white; border: none; border-radius: 5px; cursor: pointer;">Save</button>
-    </form>
-
-    <div style="background: #fff; border: 1px solid #ddd; border-radius: 8px; padding: 10px; max-height: 500px; overflow-y: auto;">
-        <table style="width: 100%; border-collapse: collapse; font-size: 0.9em;">
-            <thead>
-                <tr style="text-align: left; border-bottom: 1px solid #eee;">
-                <th>Food Name</th>
-                <th>Cals/100g</th>
-                <th>Prot/100g</th>
-                <th style="padding-left: 10px;">Actions</th> </tr>
-            </thead>
-            <tbody>
-                {% for food_item in library_items_list %}
-                <tr style="border-bottom: 1px solid #f9f9f9;">
-                    <td style="padding: 10px 0;"><strong>{{ food_item.name }}</strong></td>
-                    <td>{{ food_item.calories_per_100g }} <small>kcal</small></td>
-                    <td style="color: #9c27b0; font-weight: bold;">{{ food_item.protein_per_100g }}g</td>
-                    <td style="display: flex; gap: 10px;">
-                        <button type="button"
-                                onclick="editFood('{{ food_item.name }}', '{{ food_item.calories_per_100g }}', '{{ food_item.protein_per_100g }}')"
-                                style="background: none; border: none; color: #1a73e8; cursor: pointer; font-weight: bold; font-size: 0.9em;">
-                            Edit
-                        </button>
-
-                        <a href="/delete_library_item/{{ food_item.id }}"
-                           style="color: #ff4d4d; text-decoration: none; font-weight: bold;"
-                           onclick="return confirm('Delete {{ food_item.name }}?')">
-                           [x]
-                        </a>
-                    </td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
+{% block content %}
+<div class="page-head">
+    <h1>Food library</h1>
+    <p>Foods and their nutrition per 100g. Use them in Precision add on the Today screen.</p>
 </div>
-<script>
-function editFood(name, cals, protein) {
-    // Fill the form fields
-    document.getElementsByName('library_name')[0].value = name;
-    document.getElementsByName('library_cals')[0].value = cals;
-    document.getElementsByName('library_protein')[0].value = protein;
 
-    // Focus on the name field and scroll up
-    document.getElementsByName('library_name')[0].focus();
-    window.scrollTo({top: 0, behavior: 'smooth'});
+<form class="card" id="library-form" action="/add_to_library" method="POST">
+    <h2 id="form-title">New food</h2>
+    <div class="form-grid" style="margin-top:14px">
+        <div class="field span-6"><label for="lib-name">Name</label>
+            <input type="text" name="library_name" id="lib-name" placeholder="e.g. Banana" required></div>
+        <div class="field span-3"><label for="lib-cals">Calories per 100g</label>
+            <input type="number" step="0.1" name="library_cals" id="lib-cals" inputmode="decimal" required></div>
+        <div class="field span-3"><label for="lib-prot">Protein per 100g (g)</label>
+            <input type="number" step="0.1" name="library_protein" id="lib-prot" inputmode="decimal" required></div>
+        <div class="form-actions span-6">
+            <button type="submit" id="submit-btn" class="btn">Save food</button>
+            <button type="button" id="cancel-btn" class="btn btn-ghost" onclick="resetForm()" hidden>Cancel</button>
+        </div>
+    </div>
+</form>
+
+<div class="section-head">
+    <h2>Your foods</h2>
+    {% if library_items_list %}<span class="muted" id="lib-count">{{ library_items_list|length }} foods</span>{% endif %}
+</div>
+{% if library_items_list %}
+<input type="text" id="lib-filter" placeholder="Filter foods" aria-label="Filter foods" style="margin-bottom:12px">
+<section class="card" style="padding:6px 20px">
+    <ul class="item-list" id="lib-list">
+        {% for food_item in library_items_list %}
+        <li data-search="{{ food_item.name|lower }}">
+            <div>
+                <div class="item-name">{{ food_item.name }}</div>
+                <div class="item-meta"><span>{{ food_item.calories_per_100g }} kcal</span><span class="prot">{{ '%g'|format(food_item.protein_per_100g) }}g protein</span></div>
+            </div>
+            <div class="row-actions">
+                <button type="button" class="btn btn-ghost btn-sm"
+                        data-name="{{ food_item.name }}" data-cals="{{ food_item.calories_per_100g }}" data-prot="{{ food_item.protein_per_100g }}"
+                        onclick="editFood(this)">Edit</button>
+                <a href="/delete_library_item/{{ food_item.id }}" class="btn btn-danger btn-sm"
+                   data-name="{{ food_item.name }}" onclick="return confirm('Delete ' + this.dataset.name + '?')">Delete</a>
+            </div>
+        </li>
+        {% endfor %}
+    </ul>
+    <p class="empty" id="lib-none" hidden style="margin:10px 0">No foods match that filter.</p>
+</section>
+{% else %}
+<p class="empty">Your library is empty. Add a food above to start using Precision add.</p>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+function editFood(btn) {
+    document.getElementById('lib-name').value = btn.dataset.name;
+    document.getElementById('lib-cals').value = btn.dataset.cals;
+    document.getElementById('lib-prot').value = btn.dataset.prot;
+    document.getElementById('form-title').textContent = 'Edit food';
+    document.getElementById('submit-btn').textContent = 'Save changes';
+    document.getElementById('cancel-btn').hidden = false;
+    document.getElementById('lib-name').focus();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+function resetForm() {
+    document.getElementById('library-form').reset();
+    document.getElementById('form-title').textContent = 'New food';
+    document.getElementById('submit-btn').textContent = 'Save food';
+    document.getElementById('cancel-btn').hidden = true;
+}
+const filterBox = document.getElementById('lib-filter');
+if (filterBox) {
+    filterBox.addEventListener('input', function () {
+        const q = this.value.trim().toLowerCase();
+        let shown = 0;
+        document.querySelectorAll('#lib-list li').forEach(tr => {
+            const match = tr.dataset.search.includes(q);
+            tr.hidden = !match;
+            if (match) shown++;
+        });
+        document.getElementById('lib-none').hidden = shown > 0;
+    });
 }
 </script>
+{% endblock %}

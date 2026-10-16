@@ -1,19 +1,8 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Privacy Policy - Calorie Tracker</title>
-    <style>
-        body { font-family: sans-serif; line-height: 1.6; max-width: 800px; margin: 40px auto; padding: 0 20px; color: #333; }
-        h1 { color: #2c3e50; border-bottom: 2px solid #eee; padding-bottom: 10px; }
-        h2 { color: #2980b9; margin-top: 30px; }
-        .footer { margin-top: 50px; font-size: 0.8em; color: #777; border-top: 1px solid #eee; padding-top: 20px; }
-    </style>
-</head>
-<body>
-
-    <h1>Privacy Policy</h1>
+{% extends "base.html" %}
+{% block title %}Privacy policy · Compound Effect{% endblock %}
+{% block content %}
+<div class="prose">
+<div class="page-head"><h1>Privacy policy</h1></div>
     <p><strong>Effective Date: April 26, 2026</strong></p>
 
     <p>This Privacy Policy describes how the <strong>Calorie Tracker</strong> mobile application handles your data. Your privacy is important to us, and we are committed to being transparent about our data practices.</p>
@@ -36,9 +25,6 @@
     <h2>6. Contact Us</h2>
     <p>If you have any questions regarding this policy, you may contact us at: <strong>[Your Email Address]</strong></p>
 
-    <div class="footer">
-        <p>&copy; 2026 Rajesh. All rights reserved.</p>
-    </div>
-
-</body>
-</html>
+    <p class="muted" style="margin-top:36px">&copy; 2026 Rajesh. All rights reserved.</p>
+</div>
+{% endblock %}
